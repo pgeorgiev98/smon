@@ -28,6 +28,19 @@ void system_delete(struct system_t system)
 }
 
 
+// Comparison function for sorting CPUs
+static int cpu_cmp(const void *a, const void *b)
+{
+	const struct cpu_t *c1 = (const struct cpu_t *)a;
+	const struct cpu_t *c2 = (const struct cpu_t *)b;
+	if (c1->package_id == c2->package_id)
+		if (c1->core_id == c2->core_id)
+			return c1->id - c2->id;
+		else
+			return c1->core_id - c2->core_id;
+	else
+		return c1->package_id - c2->package_id;
+}
 
 // Initialize the CPU portion of system
 static void system_cpu_init(struct system_t *system)
@@ -71,18 +84,6 @@ static void system_cpu_init(struct system_t *system)
 	closedir(cpu_devices_dir);
 
 	// Sort the cpus array by package and core IDs
-	int cmp(const void *a, const void *b)
-	{
-		const struct cpu_t *c1 = (const struct cpu_t *)a;
-		const struct cpu_t *c2 = (const struct cpu_t *)b;
-		if (c1->package_id == c2->package_id)
-			if (c1->core_id == c2->core_id)
-				return c1->id - c2->id;
-			else
-				return c1->core_id - c2->core_id;
-		else
-			return c1->package_id - c2->package_id;
-	}
 	qsort(system->cpus, system->cpu_count,
-			sizeof(struct cpu_t), cmp);
+			sizeof(struct cpu_t), cpu_cmp);
 }
