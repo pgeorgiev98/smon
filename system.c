@@ -76,7 +76,10 @@ static void system_cpu_init(struct system_t *system)
 		const struct cpu_t *c1 = (const struct cpu_t *)a;
 		const struct cpu_t *c2 = (const struct cpu_t *)b;
 		if (c1->package_id == c2->package_id)
-			return c1->core_id - c2->core_id;
+			if (c1->core_id == c2->core_id)
+				return c1->id - c2->id;
+			else
+				return c1->core_id - c2->core_id;
 		else
 			return c1->package_id - c2->package_id;
 	}
