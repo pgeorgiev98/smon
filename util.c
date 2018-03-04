@@ -7,15 +7,35 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int read_file_to_string(const char *filename, char *out, int maxbytes)
+int open_file_readonly(const char *filename)
 {
-	int fd = open(filename, O_RDONLY);
+	return open(filename, O_RDONLY);
+}
+
+
+int read_fd_to_string(int fd, char *out, int maxbytes)
+{
 	int bytes_read = 0;
 	int bytes;
-	while ((bytes = read(fd, out + bytes_read, maxbytes - bytes_read)))
+	while ((bytes = read(fd, out + bytes_read,
+						 maxbytes - bytes_read)) > 0)
 		bytes_read += bytes;
-	close(fd);
 	return bytes_read;
+}
+
+int read_file_to_string(const char *filename, char *out, int maxbytes)
+{
+	int fd = open_file_readonly(filename);
+	return read_fd_to_string(fd, out, maxbytes);
+}
+
+
+int read_int_from_fd(int fd)
+{
+	char buf[16];
+	int l = read_fd_to_string(fd, buf, 15);
+	buf[l] = '\0';
+	return atoi(buf);
 }
 
 int read_int_from_file(const char *filename)
