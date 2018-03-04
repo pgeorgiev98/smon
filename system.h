@@ -15,4 +15,7 @@ struct system_t system_init();
 
 void system_delete(struct system_t system);
 
+/** Refresh all dynamically changing system stats */
+void system_refresh_info(struct system_t *system);
+
 #endif

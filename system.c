@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
 
@@ -24,7 +25,18 @@ struct system_t system_init()
 
 void system_delete(struct system_t system)
 {
+	for (int i = 0; i < system.cpu_count; ++i) {
+		close(system.cpus[i].cur_freq_fd);
+	}
 	free(system.cpus);
+}
+
+
+static void system_refresh_cpu_info(struct system_t *system);
+
+void system_refresh_info(struct system_t *system)
+{
+	system_refresh_cpu_info(system);
 }
 
 
@@ -67,11 +79,22 @@ static void system_cpu_init(struct system_t *system)
 		int cpu_dir_len = cpu_devices_dir_len +
 			strlen(cpu_ent->d_name);
 		
+		// Load static CPU parameters
 		strcpy(fname + cpu_dir_len, "/topology/core_id");
 		cpu.core_id = read_int_from_file(fname);
 
 		strcpy(fname + cpu_dir_len, "/topology/physical_package_id");
 		cpu.package_id = read_int_from_file(fname);
+
+		strcpy(fname + cpu_dir_len, "/cpufreq/cpuinfo_max_freq");
+		cpu.max_freq = read_int_from_file(fname);
+
+		strcpy(fname + cpu_dir_len, "/cpufreq/cpuinfo_min_freq");
+		cpu.min_freq = read_int_from_file(fname);
+
+		// Open the files for the dynamic CPU parameters
+		strcpy(fname + cpu_dir_len, "/cpufreq/scaling_cur_freq");
+		cpu.cur_freq_fd = open_file_readonly(fname);
 
 		// Add cpu to system.cpus
 		if (cpus_container_size <= system->cpu_count) {
@@ -86,4 +109,15 @@ static void system_cpu_init(struct system_t *system)
 	// Sort the cpus array by package and core IDs
 	qsort(system->cpus, system->cpu_count,
 			sizeof(struct cpu_t), cpu_cmp);
+}
+
+
+// Refresh system CPU stats
+static void system_refresh_cpu_info(struct system_t *system)
+{
+	for (int i = 0; i < system->cpu_count; ++i) {
+		struct cpu_t *cpu = &system->cpus[i];
+		lseek(cpu->cur_freq_fd, 0, SEEK_SET);
+		cpu->cur_freq = read_int_from_fd(cpu->cur_freq_fd);
+	}
 }

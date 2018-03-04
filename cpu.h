@@ -8,6 +8,13 @@ struct cpu_t
 			  e.g. cpu0, cpu3 */
 	int core_id; /**< The ID of the CPU core */
 	int package_id;  /**< The ID of the CPU package */
+
+	int min_freq; /**< Minimum CPU frequency in KHz */
+	int max_freq; /**< Maximum CPU frequency in KHz */
+	int cur_freq; /**< Current CPU frequency in KHz */
+
+	// File descriptors for files that are kept open
+	int cur_freq_fd;
 };
 
 #endif
