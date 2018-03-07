@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "util.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -10,6 +11,7 @@
 
 #define CPU_DEVICES_DIR "/sys/bus/cpu/devices/"
 const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
+#define PROC_STAT_DIR "/proc/stat"
 
 
 static void system_cpu_init(struct system_t *);
@@ -18,25 +20,36 @@ struct system_t system_init()
 {
 	struct system_t system;
 
+	system.proc_stat_fd = open_file_readonly(PROC_STAT_DIR);
+
 	system_cpu_init(&system);
+
+	system.buffer = NULL;
+	system.buffer_size = 0;
 
 	return system;
 }
 
 void system_delete(struct system_t system)
 {
+	// Close files
+	close(system.proc_stat_fd);
 	for (int i = 0; i < system.cpu_count; ++i) {
 		close(system.cpus[i].cur_freq_fd);
 	}
+
+	// Free memory
 	free(system.cpus);
 }
 
 
 static void system_refresh_cpu_info(struct system_t *system);
+static void system_refresh_cpu_usage(struct system_t *system);
 
 void system_refresh_info(struct system_t *system)
 {
 	system_refresh_cpu_info(system);
+	system_refresh_cpu_usage(system);
 }
 
 
@@ -119,5 +132,88 @@ static void system_refresh_cpu_info(struct system_t *system)
 		struct cpu_t *cpu = &system->cpus[i];
 		lseek(cpu->cur_freq_fd, 0, SEEK_SET);
 		cpu->cur_freq = read_int_from_fd(cpu->cur_freq_fd);
+	}
+}
+
+static void system_refresh_cpu_usage(struct system_t *system)
+{
+	// Read the whole /proc/stat file
+	lseek(system->proc_stat_fd, 0, SEEK_SET);
+	int len = 0;
+	for (;;) {
+		if (system->buffer_size == len) {
+			system->buffer_size += 2048;
+			system->buffer = (char *)realloc(system->buffer,
+					system->buffer_size);
+		}
+
+		int bytes_to_read = system->buffer_size - len;
+
+		int bytes_read = read_fd_to_string(system->proc_stat_fd,
+				system->buffer + len, bytes_to_read);
+		if (bytes_read <= 0)
+			break;
+		len += bytes_read;
+	}
+	system->buffer[len] = '\0';
+
+	// Skip the first line
+	int i = 0;
+	while (i < len && system->buffer[i] != '\n')
+		++i;
+
+	// For each cpuN line in /proc/stat
+	for (;;) {
+		// Make sure this line starts with cpuN
+		char cpuname[16];
+		int bytes;
+		int fields_read = sscanf(system->buffer + i,
+				"%s%n", cpuname, &bytes);
+		i += bytes;
+		if (fields_read <= 0 || strncmp(cpuname, "cpu", 3) != 0)
+			break;
+
+		// Get the cpu id (the N in cpuN)
+		int cpu_id = atoi(cpuname + 3);
+		struct cpu_t *cpu = NULL;
+		for (int c = 0; c < system->cpu_count; ++c) {
+			if (system->cpus[c].id == cpu_id) {
+				cpu = &system->cpus[c];
+				break;
+			}
+		}
+
+		// Calculate the cpu usage
+
+		int time[10];
+		for (int t = 0; t < 10; ++t) {
+			sscanf(system->buffer + i, "%d%n", &time[t], &bytes);
+			i += bytes;
+		}
+
+		int delta_time[10];
+		for (int t = 0; t < 10; ++t)
+			delta_time[t] = time[t] - cpu->time[t];
+
+
+		int total_time = 0;
+		for (int t = USER_TIME; t <= STEAL_TIME; ++t)
+			total_time += delta_time[t];
+
+		int idle_time = delta_time[IDLE_TIME] +
+						delta_time[IOWAIT_TIME];
+
+		cpu->total_usage = (double)(total_time - idle_time) /
+							total_time;
+
+		// Make sure the value is in [0.0, 1.0]
+		// It will also change nan values to 0.0
+		if (!(cpu->total_usage >= 0.0))
+			cpu->total_usage = 0.0;
+		else if (cpu->total_usage > 1.0)
+			cpu->total_usage = 1.0;
+
+		for (int f = 0; f < 10; ++f)
+			cpu->time[f] = time[f];
 	}
 }

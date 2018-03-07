@@ -13,9 +13,10 @@ int main()
 	for (;;) {
 		system_refresh_info(&system);
 		for (int i = 0; i < system.cpu_count; ++i) {
-			int l = printf("CPU %d : %d MHz",
+			int l = printf("CPU %d : %4d MHz %3d%% usage",
 					system.cpus[i].id,
-					system.cpus[i].cur_freq / 1000);
+					system.cpus[i].cur_freq / 1000,
+					(int)(system.cpus[i].total_usage * 100));
 
 			for (int i = l; i < line_len[i]; ++i)
 				printf(" ");

@@ -9,6 +9,13 @@ struct system_t
 	int cpu_count; /**< The number of CPUs in the system */
 	struct cpu_t *cpus; /**< All CPUs in the system ordered
 						  by core_id and package_id */
+
+	// File descriptors for files that are kept open
+	int proc_stat_fd;
+
+	// Generic buffer. Used when reading from /proc/stat
+	char *buffer;
+	int buffer_size;
 };
 
 struct system_t system_init();
