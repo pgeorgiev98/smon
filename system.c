@@ -1,5 +1,6 @@
 #include "system.h"
 #include "cpu.h"
+#include "disk.h"
 #include "util.h"
 
 #include <stdio.h>
@@ -11,10 +12,13 @@
 
 #define CPU_DEVICES_DIR "/sys/bus/cpu/devices/"
 const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
+#define BLOCK_DEVICES_DIR "/sys/block/"
+const int block_devices_dir_len = strlen(BLOCK_DEVICES_DIR);
 #define PROC_STAT_DIR "/proc/stat"
 
 
 static void system_cpu_init(struct system_t *);
+static void system_disk_init(struct system_t *);
 
 struct system_t system_init()
 {
@@ -23,9 +27,12 @@ struct system_t system_init()
 	system.proc_stat_fd = open_file_readonly(PROC_STAT_DIR);
 
 	system_cpu_init(&system);
+	system_disk_init(&system);
 
 	system.buffer = NULL;
 	system.buffer_size = 0;
+
+	system_refresh_info(&system);
 
 	return system;
 }
@@ -34,22 +41,26 @@ void system_delete(struct system_t system)
 {
 	// Close files
 	close(system.proc_stat_fd);
-	for (int i = 0; i < system.cpu_count; ++i) {
+	for (int i = 0; i < system.cpu_count; ++i)
 		close(system.cpus[i].cur_freq_fd);
-	}
+	for (int i = 0; i < system.disk_count; ++i)
+		close(system.disks[i].stat_fd);
 
 	// Free memory
 	free(system.cpus);
+	free(system.disks);
 }
 
 
 static void system_refresh_cpu_info(struct system_t *system);
 static void system_refresh_cpu_usage(struct system_t *system);
+static void system_refresh_disk_usage(struct system_t *system);
 
 void system_refresh_info(struct system_t *system)
 {
 	system_refresh_cpu_info(system);
 	system_refresh_cpu_usage(system);
+	system_refresh_disk_usage(system);
 }
 
 
@@ -122,6 +133,13 @@ static void system_cpu_init(struct system_t *system)
 	// Sort the cpus array by package and core IDs
 	qsort(system->cpus, system->cpu_count,
 			sizeof(struct cpu_t), cpu_cmp);
+}
+
+static void system_disk_init(struct system_t *system)
+{
+	system->disks = NULL;
+	system->disk_count = 0;
+	system->max_disk_count = 0;
 }
 
 
@@ -216,4 +234,121 @@ static void system_refresh_cpu_usage(struct system_t *system)
 		for (int f = 0; f < 10; ++f)
 			cpu->time[f] = time[f];
 	}
+}
+
+static void system_refresh_disk_usage(struct system_t *system)
+{
+	// Will be used to store the path to the stat file for each device
+	char filepath[block_devices_dir_len + 20];
+	strcpy(filepath, BLOCK_DEVICES_DIR);
+
+	// Open /sys/block/
+	DIR *block_devices_dir = opendir(BLOCK_DEVICES_DIR);
+	if (block_devices_dir == NULL) {
+		system->disk_count = 0;
+		return;
+	}
+	// List /sys/block
+	struct dirent *block_device_ent;
+	while ((block_device_ent = readdir(block_devices_dir))) {
+		// Ignore loop devices, dotfiles and devices with
+		// too long names
+		if (strncmp(block_device_ent->d_name, "loop", 4) == 0 ||
+				block_device_ent->d_name[0] == '.' ||
+				strlen(block_device_ent->d_name) >
+					MAX_DISK_NAME_LENGTH)
+			continue;
+
+		// Check for a disk with the same name in system
+		struct disk_t *diskptr = NULL;
+		for (int i = 0; i < system->disk_count; ++i) {
+			if (strcmp(block_device_ent->d_name,
+						system->disks[i].name) == 0) {
+				diskptr = &system->disks[i];
+				break;
+			}
+		}
+		// If it's not found, add it
+		if (diskptr == NULL) {
+			struct disk_t disk;
+
+			// Set the disk name
+			strcpy(disk.name, block_device_ent->d_name);
+
+			// Open the stat file
+			strcpy(filepath + block_devices_dir_len, disk.name);
+			strcpy(filepath + block_devices_dir_len +
+					strlen(disk.name), "/stat");
+			disk.stat_fd = open_file_readonly(filepath);
+			if (disk.stat_fd == -1) {
+				continue;
+			}
+
+			// Allocate memory if necessary
+			if (system->disk_count == system->max_disk_count) {
+				system->max_disk_count += 128;
+				system->disks = (struct disk_t *)realloc(
+						system->disks,
+						sizeof(struct disk_t) * system->max_disk_count);
+			}
+			system->disks[system->disk_count++] = disk;
+		}
+	}
+	closedir(block_devices_dir);
+
+	// Loop over all disks
+	for (int d = 0; d < system->disk_count; ++d) {
+		struct disk_t *disk = &system->disks[d];
+
+		// Read the disk stats
+		lseek(disk->stat_fd, 0, SEEK_SET);
+		const int stat_buffer_size = 511; // Should be enough
+		char stat_buffer[stat_buffer_size + 1];
+		int bytes_read = read_fd_to_string(disk->stat_fd,
+				stat_buffer, stat_buffer_size);
+		if (bytes_read <= 0) {
+			// On error, try to reopen the stat file
+			close(disk->stat_fd);
+			char filename[block_devices_dir_len + 20];
+			strcpy(filename, BLOCK_DEVICES_DIR);
+			strcpy(filename + block_devices_dir_len, disk->name);
+			strcpy(filename + block_devices_dir_len +
+					strlen(disk->name), "/stat");
+			if ((disk->stat_fd = open_file_readonly(filename)) < 0)
+				continue;
+			bytes_read = read_fd_to_string(disk->stat_fd,
+					stat_buffer, stat_buffer_size);
+		}
+		if (bytes_read <= 0) {
+			close(disk->stat_fd);
+			// Mark it with -1 so that we can delete it
+			// from the array
+			disk->stat_fd = -1;
+			continue;
+		}
+		stat_buffer[stat_buffer_size] = '\0';
+
+		// Save the stats
+		int buf_index = 0;
+		for (int s = 0; s < STATS_COUNT; ++s) {
+			int bytes_read;
+			int stat;
+			sscanf(stat_buffer + buf_index, "%d%n",
+					&stat, &bytes_read);
+			disk->stats_delta[s] = stat - disk->last_stats[s];
+			disk->last_stats[s] = stat;
+			buf_index += bytes_read;
+		}
+	}
+
+	// Remove unneeded disks from array
+	int i = 0;
+	for (int j = 0; j < system->disk_count; ++j) {
+		if (system->disks[j].stat_fd >= 0) {
+			if (i != j)
+				system->disks[i] = system->disks[j];
+			++i;
+		}
+	}
+	system->disk_count = i;
 }
