@@ -12,11 +12,11 @@
 #include <sys/types.h>
 
 #define CPU_DEVICES_DIR "/sys/bus/cpu/devices/"
-static const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
+static const int cpu_devices_dir_len = sizeof(CPU_DEVICES_DIR) - 1;
 #define BLOCK_DEVICES_DIR "/sys/block/"
-static const int block_devices_dir_len = strlen(BLOCK_DEVICES_DIR);
+static const int block_devices_dir_len = sizeof(BLOCK_DEVICES_DIR) - 1;
 #define INTERFACES_DIR "/sys/class/net/"
-static const int interfaces_dir_len = strlen(INTERFACES_DIR);
+static const int interfaces_dir_len = sizeof(INTERFACES_DIR) - 1;
 #define PROC_STAT_DIR "/proc/stat"
 
 
