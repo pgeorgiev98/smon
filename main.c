@@ -1,3 +1,6 @@
+#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
+
 #include "system.h"
 #include "util.h"
 #include "cpu.h"
@@ -5,13 +8,69 @@
 #include "interface.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/select.h>
+#include <termios.h>
 
 #define TERM_CLEAR_SCREEN "\e[2J"
 #define TERM_POSITION_HOME "\e[H"
 #define TERM_ERASE_REST_OF_LINE "\e[K"
 #define TERM_ERASE_DOWN "\e[J"
+
+static struct termios orig_termios;
+
+static void reset_terminal_mode()
+{
+	tcsetattr(0, TCSANOW, &orig_termios);
+}
+
+static void set_conio_terminal_mode()
+{
+	struct termios new_termios;
+
+	// take two copies - one for now, one for later
+	tcgetattr(0, &orig_termios);
+	memcpy(&new_termios, &orig_termios, sizeof(new_termios));
+
+	// register cleanup handler, and set the new terminal mode
+	atexit(reset_terminal_mode);
+	cfmakeraw(&new_termios);
+	tcsetattr(0, TCSANOW, &new_termios);
+}
+
+static int getch()
+{
+	int r;
+	unsigned char c;
+	if ((r = read(STDIN_FILENO, &c, sizeof(c))) < 0)
+		return r;
+	return c;
+}
+
+static int wait_for_keypress()
+{
+	set_conio_terminal_mode();
+	// Set timeout to 1.0 seconds
+	struct timeval timeout;
+	timeout.tv_sec = 1;
+	timeout.tv_usec = 0;
+
+	// Initialize file descriptor sets
+	fd_set read_fds, write_fds, except_fds;
+	FD_ZERO(&read_fds);
+	FD_ZERO(&write_fds);
+	FD_ZERO(&except_fds);
+	FD_SET(STDIN_FILENO, &read_fds);
+
+	int c = -1;
+	if (select(STDIN_FILENO + 1, &read_fds, &write_fds, &except_fds, &timeout) == 1)
+		c = getch();
+	reset_terminal_mode();
+	return c;
+}
+
 
 int main()
 {
@@ -65,7 +124,9 @@ int main()
 				TERM_POSITION_HOME);
 		fflush(stdout);
 
-		sleep(1);
+		int c = wait_for_keypress();
+		if (c == 'q' || c == 'Q' || c == 3)
+			break;
 	}
 
 	system_delete(system);
