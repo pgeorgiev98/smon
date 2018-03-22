@@ -45,3 +45,11 @@ int read_int_from_file(const char *filename)
 	buf[l] = '\0';
 	return atoi(buf);
 }
+
+unsigned long long read_ull_from_fd(int fd)
+{
+	char buf[24];
+	int l = read_fd_to_string(fd, buf, 23);
+	buf[l] = '\0';
+	return strtoull(buf, NULL, 10);
+}

@@ -3,6 +3,7 @@
 
 struct cpu_t;
 struct disk_t;
+struct interface_t;
 
 /** All the data about the system is stored here */
 struct system_t
@@ -11,11 +12,13 @@ struct system_t
 	struct cpu_t *cpus; /**< All CPUs in the system ordered
 						  by core_id and package_id */
 
-	int disk_count; /**< The number of disks (block devices)
-					     in the systemh */
-	struct disk_t *disks; /** All disks (block devices) in
-							  the system */
+	int disk_count; /**< The number of disks (block devices) */
+	struct disk_t *disks; /**< The actual disks in the system */
 	int max_disk_count;
+
+	int interface_count; /**< The number of network interfaces */
+	struct interface_t *interfaces; /**< The network interfaces */
+	int max_interface_count;
 
 	// File descriptors for files that are kept open
 	int proc_stat_fd;

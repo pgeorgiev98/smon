@@ -15,6 +15,9 @@ int read_file_to_string(const char *filename, char *out, int maxbytes);
 /** Read an int value from an already opened file */
 int read_int_from_fd(int fd);
 
+/** Read an unsigned long long int from an already opened file */
+unsigned long long read_ull_from_fd(int fd);
+
 /** Read an int value from a file */
 int read_int_from_file(const char *filename);
 

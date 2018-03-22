@@ -1,7 +1,8 @@
 #include "system.h"
+#include "util.h"
 #include "cpu.h"
 #include "disk.h"
-#include "util.h"
+#include "interface.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,11 +15,14 @@
 const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
 #define BLOCK_DEVICES_DIR "/sys/block/"
 const int block_devices_dir_len = strlen(BLOCK_DEVICES_DIR);
+#define INTERFACES_DIR "/sys/class/net/"
+const int interfaces_dir_len = strlen(INTERFACES_DIR);
 #define PROC_STAT_DIR "/proc/stat"
 
 
 static void system_cpu_init(struct system_t *);
 static void system_disk_init(struct system_t *);
+static void system_net_init(struct system_t *);
 
 struct system_t system_init()
 {
@@ -28,6 +32,7 @@ struct system_t system_init()
 
 	system_cpu_init(&system);
 	system_disk_init(&system);
+	system_net_init(&system);
 
 	system.buffer = NULL;
 	system.buffer_size = 0;
@@ -55,12 +60,14 @@ void system_delete(struct system_t system)
 static void system_refresh_cpu_info(struct system_t *system);
 static void system_refresh_cpu_usage(struct system_t *system);
 static void system_refresh_disk_usage(struct system_t *system);
+static void system_refresh_interfaces(struct system_t *system);
 
 void system_refresh_info(struct system_t *system)
 {
 	system_refresh_cpu_info(system);
 	system_refresh_cpu_usage(system);
 	system_refresh_disk_usage(system);
+	system_refresh_interfaces(system);
 }
 
 
@@ -140,6 +147,13 @@ static void system_disk_init(struct system_t *system)
 	system->disks = NULL;
 	system->disk_count = 0;
 	system->max_disk_count = 0;
+}
+
+static void system_net_init(struct system_t *system)
+{
+	system->interfaces = NULL;
+	system->interface_count = 0;
+	system->max_interface_count = 0;
 }
 
 
@@ -351,4 +365,94 @@ static void system_refresh_disk_usage(struct system_t *system)
 		}
 	}
 	system->disk_count = i;
+}
+
+static void system_refresh_interfaces(struct system_t *system)
+{
+	// Will be used to store the path to various files
+	char filepath[interfaces_dir_len + MAX_INTERFACE_NAME_LENGTH + 32];
+	strcpy(filepath, INTERFACES_DIR);
+
+	// Open /sys/class/net/
+	DIR *interfaces_dir = opendir(INTERFACES_DIR);
+	if (interfaces_dir == NULL) {
+		system->interface_count = 0;
+		return;
+	}
+	// List /sys/class/net/
+	struct dirent *interface_ent;
+	while ((interface_ent = readdir(interfaces_dir))) {
+		// Ignore dotfiles and devices with too long names
+		if (interface_ent->d_name[0] == '.' ||
+				strlen(interface_ent->d_name) >
+				MAX_INTERFACE_NAME_LENGTH)
+			continue;
+
+
+		// Check for an known interface with the same name
+		struct interface_t *ifaceptr = NULL;
+		for (int i = 0; i < system->interface_count; ++i) {
+			if (strcmp(interface_ent->d_name,
+						system->interfaces[i].name) == 0) {
+				ifaceptr = &system->interfaces[i];
+				break;
+			}
+		}
+		// If it's not found, add it
+		if (ifaceptr == NULL) {
+			struct interface_t interface;
+
+			// Set the interface name
+			strcpy(interface.name, interface_ent->d_name);
+
+			// Append the name to the path
+			strcpy(filepath + interfaces_dir_len, interface.name);
+
+			// Open the rx_bytes file
+			strcpy(filepath + interfaces_dir_len +
+					strlen(interface.name), "/statistics/rx_bytes");
+			interface.rx_bytes_fd = open_file_readonly(filepath);
+			if (interface.rx_bytes_fd == -1) {
+				continue;
+			}
+
+			// Open the tx_bytes file
+			strcpy(filepath + interfaces_dir_len +
+					strlen(interface.name), "/statistics/tx_bytes");
+			interface.tx_bytes_fd = open_file_readonly(filepath);
+			if (interface.tx_bytes_fd == -1) {
+				close(interface.rx_bytes_fd);
+				continue;
+			}
+
+			// Allocate memory if necessary
+			if (system->interface_count == system->max_interface_count) {
+				system->max_interface_count += 128;
+				system->interfaces = (struct interface_t *)realloc(
+						system->interfaces,
+						sizeof(struct interface_t) *
+						system->max_interface_count);
+			}
+			system->interfaces[system->interface_count++] = interface;
+		}
+	}
+	closedir(interfaces_dir);
+
+	// Loop over all interfaces
+	for (int i = 0; i < system->interface_count; ++i) {
+		struct interface_t *interface = &system->interfaces[i];
+
+		// Read the interface stats
+
+		lseek(interface->rx_bytes_fd, 0, SEEK_SET);
+		unsigned long long rx = read_ull_from_fd(interface->rx_bytes_fd);
+		interface->delta_rx_bytes = rx - interface->last_total_rx_bytes;
+		interface->last_total_rx_bytes = rx;
+
+		lseek(interface->tx_bytes_fd, 0, SEEK_SET);
+		unsigned long long tx = read_ull_from_fd(interface->tx_bytes_fd);
+		interface->delta_tx_bytes = tx - interface->last_total_tx_bytes;
+		interface->last_total_tx_bytes = tx;
+
+	}
 }
