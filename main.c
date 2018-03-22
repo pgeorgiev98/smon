@@ -86,7 +86,7 @@ int main()
 			const struct cpu_t *cpu = &system.cpus[c];
 			printf("CPU %d : %4d MHz %3d%% usage"
 					TERM_ERASE_REST_OF_LINE "\n",
-					cpu->id,
+					c + 1,
 					cpu->cur_freq / 1000,
 					(int)(cpu->total_usage * 100));
 		}
