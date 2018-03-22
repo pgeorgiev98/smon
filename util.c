@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -38,6 +39,14 @@ int read_int_from_fd(int fd)
 	return atoi(buf);
 }
 
+unsigned long long read_ull_from_fd(int fd)
+{
+	char buf[24];
+	int l = read_fd_to_string(fd, buf, 23);
+	buf[l] = '\0';
+	return strtoull(buf, NULL, 10);
+}
+
 int read_int_from_file(const char *filename)
 {
 	char buf[16];
@@ -46,10 +55,20 @@ int read_int_from_file(const char *filename)
 	return atoi(buf);
 }
 
-unsigned long long read_ull_from_fd(int fd)
+
+void bytes_to_human_readable(unsigned long long bytes, char *out)
 {
-	char buf[24];
-	int l = read_fd_to_string(fd, buf, 23);
-	buf[l] = '\0';
-	return strtoull(buf, NULL, 10);
+	static const char * const units[] = {
+		"B", "KiB", "MiB", "GiB", "TiB",
+		"PiB", "EiB", "ZiB", "YiB"
+	};
+	static int units_count = sizeof(units) / sizeof(char *);
+
+	int u, d = 0;
+	for (u = 0; u < units_count && bytes >= 1024; ++u) {
+		d = ((bytes % 1024) / 1024.0f) * 10;
+		bytes /= 1024;
+	}
+	sprintf(out, "%llu.%d%s", bytes, d, units[u]);
 }
+

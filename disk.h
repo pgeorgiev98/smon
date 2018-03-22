@@ -4,26 +4,29 @@
 // Disk stats
 enum
 {
-	READ_IO = 0,
-	READ_MERGES = 1,
-	READ_SECTORS = 2,
-	READ_TICKS = 3,
-	WRITE_IO = 4,
-	WRITE_MERGES = 5,
-	WRITE_SECTORS = 6,
-	WRITE_TICKS = 7,
-	STATS_COUNT = 8
+	DISK_READ_IO = 0,
+	DISK_READ_MERGES = 1,
+	DISK_READ_SECTORS = 2,
+	DISK_READ_TICKS = 3,
+	DISK_WRITE_IO = 4,
+	DISK_WRITE_MERGES = 5,
+	DISK_WRITE_SECTORS = 6,
+	DISK_WRITE_TICKS = 7,
+	DISK_STATS_COUNT = 8
 };
 
-#define MAX_DISK_NAME_LENGTH 7
+#define MAX_DISK_NAME_LENGTH 15
 
+/** A block device */
 struct disk_t
 {
-	char name[MAX_DISK_NAME_LENGTH + 1];
-	int stat_fd;
+	char name[MAX_DISK_NAME_LENGTH + 1]; /**< The disk name */
 
-	int stats_delta[STATS_COUNT];
-	int last_stats[STATS_COUNT];
+	int stats_delta[DISK_STATS_COUNT]; /**< The change of the stats */
+	int last_stats[DISK_STATS_COUNT]; /**< The values from the stat file */
+
+	// File descriptors for files that are kept open
+	int stat_fd;
 };
 
 #endif

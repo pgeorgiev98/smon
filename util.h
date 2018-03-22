@@ -21,4 +21,8 @@ unsigned long long read_ull_from_fd(int fd);
 /** Read an int value from a file */
 int read_int_from_file(const char *filename);
 
+
+/** Converts bytes to a human readable string (e.g. 37 MiB) */
+void bytes_to_human_readable(unsigned long long bytes, char *out);
+
 #endif

@@ -12,11 +12,11 @@
 #include <sys/types.h>
 
 #define CPU_DEVICES_DIR "/sys/bus/cpu/devices/"
-const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
+static const int cpu_devices_dir_len = strlen(CPU_DEVICES_DIR);
 #define BLOCK_DEVICES_DIR "/sys/block/"
-const int block_devices_dir_len = strlen(BLOCK_DEVICES_DIR);
+static const int block_devices_dir_len = strlen(BLOCK_DEVICES_DIR);
 #define INTERFACES_DIR "/sys/class/net/"
-const int interfaces_dir_len = strlen(INTERFACES_DIR);
+static const int interfaces_dir_len = strlen(INTERFACES_DIR);
 #define PROC_STAT_DIR "/proc/stat"
 
 
@@ -50,23 +50,26 @@ void system_delete(struct system_t system)
 		close(system.cpus[i].cur_freq_fd);
 	for (int i = 0; i < system.disk_count; ++i)
 		close(system.disks[i].stat_fd);
+	for (int i = 0; i < system.interface_count; ++i) {
+		close(system.interfaces[i].rx_bytes_fd);
+		close(system.interfaces[i].tx_bytes_fd);
+	}
 
 	// Free memory
 	free(system.cpus);
 	free(system.disks);
+	free(system.interfaces);
 }
 
 
-static void system_refresh_cpu_info(struct system_t *system);
-static void system_refresh_cpu_usage(struct system_t *system);
-static void system_refresh_disk_usage(struct system_t *system);
+static void system_refresh_cpus(struct system_t *system);
+static void system_refresh_disks(struct system_t *system);
 static void system_refresh_interfaces(struct system_t *system);
 
 void system_refresh_info(struct system_t *system)
 {
-	system_refresh_cpu_info(system);
-	system_refresh_cpu_usage(system);
-	system_refresh_disk_usage(system);
+	system_refresh_cpus(system);
+	system_refresh_disks(system);
 	system_refresh_interfaces(system);
 }
 
@@ -158,17 +161,15 @@ static void system_net_init(struct system_t *system)
 
 
 // Refresh system CPU stats
-static void system_refresh_cpu_info(struct system_t *system)
+static void system_refresh_cpus(struct system_t *system)
 {
+	// Update current CPU frequency
 	for (int i = 0; i < system->cpu_count; ++i) {
 		struct cpu_t *cpu = &system->cpus[i];
 		lseek(cpu->cur_freq_fd, 0, SEEK_SET);
 		cpu->cur_freq = read_int_from_fd(cpu->cur_freq_fd);
 	}
-}
 
-static void system_refresh_cpu_usage(struct system_t *system)
-{
 	// Read the whole /proc/stat file
 	lseek(system->proc_stat_fd, 0, SEEK_SET);
 	int len = 0;
@@ -217,26 +218,26 @@ static void system_refresh_cpu_usage(struct system_t *system)
 
 		// Calculate the cpu usage
 
-		int time[10];
-		for (int t = 0; t < 10; ++t) {
-			sscanf(system->buffer + i, "%d%n", &time[t], &bytes);
+		int stats[CPU_STATS_COUNT];
+		for (int t = 0; t < CPU_STATS_COUNT; ++t) {
+			sscanf(system->buffer + i, "%d%n", &stats[t], &bytes);
 			i += bytes;
 		}
 
-		int delta_time[10];
-		for (int t = 0; t < 10; ++t)
-			delta_time[t] = time[t] - cpu->time[t];
+		int delta_stats[CPU_STATS_COUNT];
+		for (int t = 0; t < CPU_STATS_COUNT; ++t)
+			delta_stats[t] = stats[t] - cpu->stats[t];
 
 
-		int total_time = 0;
-		for (int t = USER_TIME; t <= STEAL_TIME; ++t)
-			total_time += delta_time[t];
+		int total_cpu_time = 0;
+		for (int t = CPU_USER_TIME; t <= CPU_STEAL_TIME; ++t)
+			total_cpu_time += delta_stats[t];
 
-		int idle_time = delta_time[IDLE_TIME] +
-						delta_time[IOWAIT_TIME];
+		int idle_cpu_time = delta_stats[CPU_IDLE_TIME] +
+							delta_stats[CPU_IOWAIT_TIME];
 
-		cpu->total_usage = (double)(total_time - idle_time) /
-							total_time;
+		cpu->total_usage = (double)(total_cpu_time - idle_cpu_time) /
+							total_cpu_time;
 
 		// Make sure the value is in [0.0, 1.0]
 		// It will also change nan values to 0.0
@@ -245,12 +246,12 @@ static void system_refresh_cpu_usage(struct system_t *system)
 		else if (cpu->total_usage > 1.0)
 			cpu->total_usage = 1.0;
 
-		for (int f = 0; f < 10; ++f)
-			cpu->time[f] = time[f];
+		for (int f = 0; f < CPU_STATS_COUNT; ++f)
+			cpu->stats[f] = stats[f];
 	}
 }
 
-static void system_refresh_disk_usage(struct system_t *system)
+static void system_refresh_disks(struct system_t *system)
 {
 	// Will be used to store the path to the stat file for each device
 	char filepath[block_devices_dir_len + 20];
@@ -344,7 +345,7 @@ static void system_refresh_disk_usage(struct system_t *system)
 
 		// Save the stats
 		int buf_index = 0;
-		for (int s = 0; s < STATS_COUNT; ++s) {
+		for (int s = 0; s < DISK_STATS_COUNT; ++s) {
 			int bytes_read;
 			int stat;
 			sscanf(stat_buffer + buf_index, "%d%n",

@@ -3,16 +3,17 @@
 
 // CPU time
 enum {
-	USER_TIME = 0,
-	NICE_TIME = 1,
-	SYSTEM_TIME = 2,
-	IDLE_TIME = 3,
-	IOWAIT_TIME = 4,
-	IRQ_TIME = 5,
-	SOFTIRQ_TIME = 6,
-	STEAL_TIME = 7,
-	GUEST_TIME = 8,
-	GUESTNICE_TIME = 9
+	CPU_USER_TIME = 0,
+	CPU_NICE_TIME = 1,
+	CPU_SYSTEM_TIME = 2,
+	CPU_IDLE_TIME = 3,
+	CPU_IOWAIT_TIME = 4,
+	CPU_IRQ_TIME = 5,
+	CPU_SOFTIRQ_TIME = 6,
+	CPU_STEAL_TIME = 7,
+	CPU_GUEST_TIME = 8,
+	CPU_GUESTNICE_TIME = 9,
+	CPU_STATS_COUNT = 10
 };
 
 /** A logical CPU */
@@ -29,7 +30,7 @@ struct cpu_t
 
 	// CPU usage
 	double total_usage; /**< The total usage for this cpu [0.0, 1.0] */
-	int time[10]; /**< The last read time parameters from /proc/stat */
+	int stats[CPU_STATS_COUNT]; /**< The last read time parameters from /proc/stat */
 
 	// File descriptors for files that are kept open
 	int cur_freq_fd;
