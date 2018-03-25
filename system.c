@@ -56,6 +56,7 @@ void system_delete(struct system_t system)
 	}
 
 	// Free memory
+	free(system.buffer);
 	free(system.cpus);
 	free(system.disks);
 	free(system.interfaces);
@@ -106,6 +107,8 @@ static void system_cpu_init(struct system_t *system)
 			continue;
 
 		struct cpu_t cpu;
+		for (int i = 0; i < CPU_STATS_COUNT; ++i)
+			cpu.stats[i] = 0;
 		cpu.id = atoi(cpu_ent->d_name + 3);
 
 		// Set fname to /sys/bus/cpu/devices/cpuN
@@ -286,6 +289,8 @@ static void system_refresh_disks(struct system_t *system)
 		// If it's not found, add it
 		if (diskptr == NULL) {
 			struct disk_t disk;
+			for (int i = 0; i < DISK_STATS_COUNT; ++i)
+				disk.last_stats[i] = 0;
 
 			// Set the disk name
 			strcpy(disk.name, block_device_ent->d_name);
@@ -341,7 +346,7 @@ static void system_refresh_disks(struct system_t *system)
 			disk->stat_fd = -1;
 			continue;
 		}
-		stat_buffer[stat_buffer_size] = '\0';
+		stat_buffer[bytes_read] = '\0';
 
 		// Save the stats
 		int buf_index = 0;
@@ -402,6 +407,8 @@ static void system_refresh_interfaces(struct system_t *system)
 		// If it's not found, add it
 		if (ifaceptr == NULL) {
 			struct interface_t interface;
+			interface.last_total_rx_bytes = 0;
+			interface.last_total_tx_bytes = 0;
 
 			// Set the interface name
 			strcpy(interface.name, interface_ent->d_name);
