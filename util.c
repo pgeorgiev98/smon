@@ -27,7 +27,9 @@ int read_fd_to_string(int fd, char *out, int maxbytes)
 int read_file_to_string(const char *filename, char *out, int maxbytes)
 {
 	int fd = open_file_readonly(filename);
-	return read_fd_to_string(fd, out, maxbytes);
+	int bytes = read_fd_to_string(fd, out, maxbytes);
+	close(fd);
+	return bytes;
 }
 
 
