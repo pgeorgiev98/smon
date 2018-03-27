@@ -21,12 +21,12 @@
 
 static struct termios orig_termios;
 
-static void reset_terminal_mode()
+static void reset_terminal_mode(void)
 {
 	tcsetattr(0, TCSANOW, &orig_termios);
 }
 
-static void set_conio_terminal_mode()
+static void set_conio_terminal_mode(void)
 {
 	struct termios new_termios;
 
@@ -40,7 +40,7 @@ static void set_conio_terminal_mode()
 	tcsetattr(0, TCSANOW, &new_termios);
 }
 
-static int getch()
+static int getch(void)
 {
 	int r;
 	unsigned char c;
@@ -49,7 +49,7 @@ static int getch()
 	return c;
 }
 
-static int wait_for_keypress()
+static int wait_for_keypress(void)
 {
 	set_conio_terminal_mode();
 	// Set timeout to 1.0 seconds

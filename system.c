@@ -24,7 +24,7 @@ static void system_cpu_init(struct system_t *);
 static void system_disk_init(struct system_t *);
 static void system_net_init(struct system_t *);
 
-struct system_t system_init()
+struct system_t system_init(void)
 {
 	struct system_t system;
 

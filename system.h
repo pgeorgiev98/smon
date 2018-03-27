@@ -28,7 +28,7 @@ struct system_t
 	int buffer_size;
 };
 
-struct system_t system_init();
+struct system_t system_init(void);
 
 void system_delete(struct system_t system);
 
