@@ -32,8 +32,11 @@ struct cpu_t
 	double total_usage; /**< The total usage for this cpu [0.0, 1.0] */
 	int stats[CPU_STATS_COUNT]; /**< The last read time parameters from /proc/stat */
 
+	int cur_temp; /**< The current core temperature in millidegree Celsius */
+
 	// File descriptors for files that are kept open
 	int cur_freq_fd;
+	int cur_temp_fd;
 };
 
 #endif

@@ -84,11 +84,22 @@ int main()
 		// CPU frequency and usage
 		for (int c = 0; c < system.cpu_count; ++c) {
 			const struct cpu_t *cpu = &system.cpus[c];
-			printf("CPU %d : %4d MHz %3d%% usage"
-					TERM_ERASE_REST_OF_LINE "\n",
-					c + 1,
-					cpu->cur_freq / 1000,
-					(int)(cpu->total_usage * 100));
+			if (c == 0 || cpu->core_id != system.cpus[c - 1].core_id) {
+				// CPU info with temperature
+				printf("CPU %d : %4d MHz %3d%% usage %3dC"
+						TERM_ERASE_REST_OF_LINE "\n",
+						c + 1,
+						cpu->cur_freq / 1000,
+						(int)(cpu->total_usage * 100),
+						cpu->cur_temp / 1000);
+			} else {
+				// CPU info without temperature
+				printf("CPU %d : %4d MHz %3d%% usage"
+						TERM_ERASE_REST_OF_LINE "\n",
+						c + 1,
+						cpu->cur_freq / 1000,
+						(int)(cpu->total_usage * 100));
+			}
 		}
 		printf(TERM_ERASE_REST_OF_LINE "\n");
 

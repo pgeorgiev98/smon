@@ -13,6 +13,8 @@
 
 #define CPU_DEVICES_DIR "/sys/bus/cpu/devices/"
 static const int cpu_devices_dir_len = sizeof(CPU_DEVICES_DIR) - 1;
+#define HWMON_DIR "/sys/class/hwmon/"
+static const int hwmon_dir_len = sizeof(HWMON_DIR) - 1;
 #define BLOCK_DEVICES_DIR "/sys/block/"
 static const int block_devices_dir_len = sizeof(BLOCK_DEVICES_DIR) - 1;
 #define INTERFACES_DIR "/sys/class/net/"
@@ -133,6 +135,9 @@ static void system_cpu_init(struct system_t *system)
 		strcpy(fname + cpu_dir_len, "/cpufreq/scaling_cur_freq");
 		cpu.cur_freq_fd = open_file_readonly(fname);
 
+		// Set the current cpu temperature to the default
+		cpu.cur_temp = 0;
+
 		// Add cpu to system.cpus
 		if (cpus_container_size <= system->cpu_count) {
 			cpus_container_size += 64;
@@ -252,6 +257,91 @@ static void system_refresh_cpus(struct system_t *system)
 		for (int f = 0; f < CPU_STATS_COUNT; ++f)
 			cpu->stats[f] = stats[f];
 	}
+
+	// Get the cpu core temperatures
+
+	// Set all cpu temps to the default
+	for (int i = 0; i < system->cpu_count; ++i)
+		system->cpus[i].cur_temp = 0;
+
+	// Open /sys/class/hwmon/
+	DIR *hwmon_dir = opendir(HWMON_DIR);
+	if (hwmon_dir == NULL)
+		return;
+	char filename[hwmon_dir_len + 100];
+	strcpy(filename, HWMON_DIR);
+	// List /sys/class/hwmon/
+	struct dirent *hwmon_ent;
+	while ((hwmon_ent = readdir(hwmon_dir))) {
+		const char *hwmon_subdir_name = hwmon_ent->d_name;
+		const int hwmon_subdir_name_len = strlen(hwmon_subdir_name);
+		// Ignore dotfiles
+		if (hwmon_subdir_name[0] == '.')
+			continue;
+
+		// Open /sys/class/hwmon/$hwmon_subdir_name
+		strcpy(filename + hwmon_dir_len, hwmon_subdir_name);
+		strcpy(filename + hwmon_dir_len + hwmon_subdir_name_len, "/");
+		DIR *hwmon_subdir = opendir(filename);
+		if (hwmon_subdir == NULL)
+			continue;
+		// List /sys/class/hwmon/$hwmon_subdir_name
+		struct dirent *hwmon_subent;
+		while ((hwmon_subent = readdir(hwmon_subdir))) {
+			// We're looking for files that match /^temp[0-9]+_label$/
+			const char *fnm = hwmon_subent->d_name;
+			// Name starts with temp
+			if (strncmp(fnm, "temp", 4))
+				continue;
+			// Followed by at least one digit
+			int digits = 0;
+			for (; fnm[4 + digits] >= '0' && fnm[4 + digits] <= '9'; ++digits);
+			if (digits == 0)
+				continue;
+			// Followed by "_label"
+			if (strncmp(fnm + 4 + digits, "_label", 6))
+				continue;
+			// And that's it
+			if (fnm[4 + digits + 6] != '\0')
+				continue;
+
+			// We found our file, now open it and read it's contents
+			strcpy(filename + hwmon_dir_len + hwmon_subdir_name_len + 1, fnm);
+			char contents[32];
+			contents[read_file_to_string(filename, contents, sizeof(contents) - 1)] = '\0';
+			// We hope we just read something like /^Core [0-9]+$/
+			// Contents start with "Core "
+			if (strncmp(contents, "Core ", 5))
+				continue;
+			// Followed by at least one digit (that's out core id)
+			int core_id_len = 0;
+			int core_id = 0;
+			for (; contents[5 + core_id_len] >= '0' && contents[5 + core_id_len] <= '9'; ++core_id_len)
+				core_id = core_id * 10 + contents[5 + core_id_len] - '0';
+			if (core_id_len == 0)
+				continue;
+			// And that's it
+			if (contents[5 + core_id_len] != '\n')
+				continue;
+
+			// Now let's try to read the file that has the actual core temperature
+			char temp_filename[4 + digits + 6 + 1];;
+			strncpy(temp_filename, fnm, 4 + digits);
+			strcpy(temp_filename + 4 + digits, "_input");
+			strcpy(filename + hwmon_dir_len + hwmon_subdir_name_len + 1, temp_filename);
+			contents[read_file_to_string(filename, contents, sizeof(contents) - 1)] = '\0';
+			if (contents[0] == '\0')
+				continue;
+			int temperature = atoi(contents);
+
+			// Set it to all CPUs with this core id
+			for (int i = 0; i < system->cpu_count; ++i)
+				if (system->cpus[i].core_id == core_id)
+					system->cpus[i].cur_temp = temperature;
+		}
+		closedir(hwmon_subdir);
+	}
+	closedir(hwmon_dir);
 }
 
 static void system_refresh_disks(struct system_t *system)
