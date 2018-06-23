@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <termios.h>
+#include <signal.h>
 
 #define error(...) { fprintf(stderr, __VA_ARGS__); exit(-1); }
 
@@ -76,8 +77,23 @@ static int wait_for_keypress(void)
 }
 
 
+volatile sig_atomic_t must_exit = 0;
+
+void signal_handler(int signum)
+{
+    must_exit = 1;
+}
+
 int main(int argc, char **argv)
 {
+	// Catch SIGTERM
+	{
+		struct sigaction action;
+		memset(&action, 0, sizeof(struct sigaction));
+		action.sa_handler = signal_handler;
+		sigaction(SIGTERM, &action, NULL);
+	}
+
 	struct system_t system = system_init();
 
 	struct logger_t logger;
@@ -85,6 +101,7 @@ int main(int argc, char **argv)
 	int log_stats_count = 0;
 	const char *log_filename = NULL;
 
+	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
 		const char *arg = argv[i];
 		if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) {
@@ -240,7 +257,7 @@ int main(int argc, char **argv)
 		fflush(stdout);
 
 		int c = wait_for_keypress();
-		if (c == 'q' || c == 'Q' || c == 3)
+		if (c == 'q' || c == 'Q' || c == 3 || must_exit)
 			break;
 	}
 
