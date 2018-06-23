@@ -1,6 +1,8 @@
 #define _BSD_SOURCE
 #define _DEFAULT_SOURCE
 
+#include "logger.h"
+
 #include "system.h"
 #include "util.h"
 #include "cpu.h"
@@ -13,6 +15,8 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <termios.h>
+
+#define error(...) { fprintf(stderr, __VA_ARGS__); exit(-1); }
 
 #define TERM_CLEAR_SCREEN "\e[2J"
 #define TERM_POSITION_HOME "\e[H"
@@ -72,14 +76,114 @@ static int wait_for_keypress(void)
 }
 
 
-int main()
+int main(int argc, char **argv)
 {
 	struct system_t system = system_init();
+
+	struct logger_t logger;
+	struct logger_stat_t log_stats[128];
+	int log_stats_count = 0;
+	const char *log_filename = NULL;
+
+	for (int i = 1; i < argc; ++i) {
+		const char *arg = argv[i];
+		if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) {
+			printf(
+					"-h --help                            Print this help message\n"
+					"-l --log filename stat0 stat1 ...    Log stats to csv file, where each stat can be:\n"
+					"    cpuX{usage,temp,freq} disk_NAME_{read,write} iface_NAME_{read,write}\n");
+			return 0;
+		} else if (!strcmp(arg, "-l") || !strcmp(arg, "--log")) {
+			++i;
+			if (i == argc)
+				error("Log file name required\n");
+			log_filename = argv[i++];
+			while (i < argc) {
+				const char *stat_name = argv[i];
+				struct logger_stat_t stat;
+				int ok = 1;
+				if (!strncmp(stat_name, "cpu", 3)) {
+					char *id_end;
+					int id = strtol(stat_name + 3, &id_end, 10);
+					if (id_end != stat_name + 3) {
+						stat.data.cpu_id = id;
+						if (!strcmp(id_end, "u") || !strcmp(id_end, "usage"))
+							stat.type = LOGGER_CPU_USAGE;
+						else if (!strcmp(id_end, "t") || !strcmp(id_end, "temp"))
+							stat.type = LOGGER_CPU_TEMPERATURE;
+						else if (!strcmp(id_end, "f") || !strcmp(id_end, "freq"))
+							stat.type = LOGGER_CPU_FREQUENCY;
+						else
+							ok = 0;
+						if (ok)
+							log_stats[log_stats_count++] = stat;
+					}
+				} else if (!strncmp(stat_name, "disk_", 5)) {
+					const char *name_end = stat_name + 5;
+					while (*name_end && *name_end != '_')
+						++name_end;
+					if (*name_end == '\0') {
+						ok = 0;
+					} else {
+						int len = name_end - stat_name - 5;
+						strncpy(stat.data.disk_name, stat_name + 5, len);
+						stat.data.disk_name[len] = '\0';
+						++name_end;
+						if (!strcmp(name_end, "r") || !strcmp(name_end, "read"))
+							stat.type = LOGGER_DISK_READ;
+						else if (!strcmp(name_end, "w") || !strcmp(name_end, "write"))
+							stat.type = LOGGER_DISK_WRITE;
+						else
+							ok = 0;
+						if (ok)
+							log_stats[log_stats_count++] = stat;
+					}
+				} else if (!strncmp(stat_name, "iface_", 6)) {
+					const char *name_end = stat_name + 6;
+					while (*name_end && *name_end != '_')
+						++name_end;
+					if (*name_end == '\0') {
+						ok = 0;
+					} else {
+						int len = name_end - stat_name - 6;
+						strncpy(stat.data.iface_name, stat_name + 6, len);
+						stat.data.iface_name[len] = '\0';
+						++name_end;
+						if (!strcmp(name_end, "r") || !strcmp(name_end, "read"))
+							stat.type = LOGGER_IFACE_READ;
+						else if (!strcmp(name_end, "w") || !strcmp(name_end, "write"))
+							stat.type = LOGGER_IFACE_WRITE;
+						else
+							ok = 0;
+						if (ok)
+							log_stats[log_stats_count++] = stat;
+					}
+				} else
+					ok = 0;
+
+				if (!ok) {
+					--i;
+					break;
+				}
+				++i;
+			}
+		} else {
+			error("Unknown argument %s. Try %s --help\n", argv[i], argv[0]);
+		}
+	}
+
+	int logger_ret = logger_init(&logger, CSV, log_filename, log_stats_count,
+			log_stats);
+	if (logger_ret != 0) {
+		fprintf(stderr, "Failed to initialize logger: %d\n", logger_ret);
+		return 1;
+	}
 
 	// Loop forever, show CPU usage and frequency and disk usage
 	printf(TERM_CLEAR_SCREEN TERM_POSITION_HOME);
 	for (;;) {
 		system_refresh_info(&system);
+		logger_log(&logger, &system);
 
 		// CPU frequency and usage
 		for (int c = 0; c < system.cpu_count; ++c) {
@@ -139,6 +243,8 @@ int main()
 		if (c == 'q' || c == 'Q' || c == 3)
 			break;
 	}
+
+	logger_destroy(&logger);
 
 	system_delete(system);
 	return 0;

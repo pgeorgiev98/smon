@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 project(smon)
-add_executable(smon main.c system.c util.c)
+add_executable(smon main.c system.c util.c logger.c)
 set_property(TARGET smon PROPERTY C_STANDARD 99)
 
 # Install
