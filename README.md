@@ -2,6 +2,8 @@
 
 A small terminal-based system monitor for Linux that I write in my free time
 
+![Screenshot](screenshot.png?raw=true "smon screenshot")
+
 ## Features
 The program can monitor the following stats:
 - CPU usage, frequency and temperature
