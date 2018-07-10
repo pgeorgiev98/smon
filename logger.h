@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "disk.h"
 #include "interface.h"
+#include "battery.h"
 
 struct system_t;
 
@@ -21,12 +22,16 @@ struct logger_stat_t
 		LOGGER_DISK_READ,
 		LOGGER_DISK_WRITE,
 		LOGGER_IFACE_READ,
-		LOGGER_IFACE_WRITE
+		LOGGER_IFACE_WRITE,
+		LOGGER_BAT_CHARGE,
+		LOGGER_BAT_CURRENT,
+		LOGGER_BAT_VOLTAGE
 	} type;
 	union logger_stat_data {
 		int cpu_id;
 		char iface_name[MAX_INTERFACE_NAME_LENGTH + 1];
 		char disk_name[MAX_DISK_NAME_LENGTH + 1];
+		char battery_name[MAX_BATTERY_NAME_LENGTH + 1];
 	} data;
 };
 

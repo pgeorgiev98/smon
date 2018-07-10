@@ -3,6 +3,7 @@
 #include "cpu.h"
 #include "disk.h"
 #include "interface.h"
+#include "battery.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,12 +20,15 @@ static const int hwmon_dir_len = sizeof(HWMON_DIR) - 1;
 static const int block_devices_dir_len = sizeof(BLOCK_DEVICES_DIR) - 1;
 #define INTERFACES_DIR "/sys/class/net/"
 static const int interfaces_dir_len = sizeof(INTERFACES_DIR) - 1;
+#define POWER_DIR "/sys/class/power_supply/"
+static const int power_dir_len = sizeof(POWER_DIR) - 1;
 #define PROC_STAT_DIR "/proc/stat"
 
 
 static void system_cpu_init(struct system_t *);
 static void system_disk_init(struct system_t *);
 static void system_net_init(struct system_t *);
+static void system_bat_init(struct system_t *);
 
 struct system_t system_init(void)
 {
@@ -35,6 +39,7 @@ struct system_t system_init(void)
 	system_cpu_init(&system);
 	system_disk_init(&system);
 	system_net_init(&system);
+	system_bat_init(&system);
 
 	system.buffer = NULL;
 	system.buffer_size = 0;
@@ -56,24 +61,32 @@ void system_delete(struct system_t system)
 		close(system.interfaces[i].rx_bytes_fd);
 		close(system.interfaces[i].tx_bytes_fd);
 	}
+	for (int i = 0; i < system.battery_count; ++i) {
+		close(system.batteries[i].charge_fd);
+		close(system.batteries[i].current_fd);
+		close(system.batteries[i].voltage_fd);
+	}
 
 	// Free memory
 	free(system.buffer);
 	free(system.cpus);
 	free(system.disks);
 	free(system.interfaces);
+	free(system.batteries);
 }
 
 
 static void system_refresh_cpus(struct system_t *system);
 static void system_refresh_disks(struct system_t *system);
 static void system_refresh_interfaces(struct system_t *system);
+static void system_refresh_batteries(struct system_t *system);
 
 void system_refresh_info(struct system_t *system)
 {
 	system_refresh_cpus(system);
 	system_refresh_disks(system);
 	system_refresh_interfaces(system);
+	system_refresh_batteries(system);
 }
 
 
@@ -165,6 +178,13 @@ static void system_net_init(struct system_t *system)
 	system->interfaces = NULL;
 	system->interface_count = 0;
 	system->max_interface_count = 0;
+}
+
+static void system_bat_init(struct system_t *system)
+{
+	system->batteries = NULL;
+	system->battery_count = 0;
+	system->max_battery_count = 0;
 }
 
 
@@ -552,5 +572,103 @@ static void system_refresh_interfaces(struct system_t *system)
 		interface->delta_tx_bytes = tx - interface->last_total_tx_bytes;
 		interface->last_total_tx_bytes = tx;
 
+	}
+}
+
+static void system_refresh_batteries(struct system_t *system)
+{
+	// Will be used to store the path to various files
+	char filepath[power_dir_len + MAX_BATTERY_NAME_LENGTH + 32];
+	strcpy(filepath, POWER_DIR);
+
+	// Open /sys/class/power_supply/
+	DIR *power_dir = opendir(POWER_DIR);
+	if (power_dir == NULL) {
+		system->battery_count = 0;
+		return;
+	}
+	// List /sys/class/power_supply/
+	struct dirent *power_ent;
+	while ((power_ent = readdir(power_dir))) {
+		// Ignore devices with too long names and
+		// directories with names not starting with BAT
+		if (strlen(power_ent->d_name) > MAX_BATTERY_NAME_LENGTH ||
+				strncmp(power_ent->d_name, "BAT", 3))
+			continue;
+
+
+		// Check for an known battery with the same name
+		struct battery_t *batptr = NULL;
+		for (int i = 0; i < system->battery_count; ++i) {
+			if (strcmp(power_ent->d_name,
+						system->batteries[i].name) == 0) {
+				batptr = &system->batteries[i];
+				break;
+			}
+		}
+		// If it's not found, add it
+		if (batptr == NULL) {
+			struct battery_t battery;
+
+			// Set the battery name
+			strcpy(battery.name, power_ent->d_name);
+
+			// Append the name to the path
+			strcpy(filepath + power_dir_len, battery.name);
+
+			// Open the charge file
+			strcpy(filepath + power_dir_len +
+					strlen(battery.name), "/capacity");
+			battery.charge_fd = open_file_readonly(filepath);
+			if (battery.charge_fd == -1)
+				continue;
+
+			// Open the current_now file
+			strcpy(filepath + power_dir_len +
+					strlen(battery.name), "/current_now");
+			battery.current_fd = open_file_readonly(filepath);
+			if (battery.current_fd == -1) {
+				close(battery.charge_fd);
+				continue;
+			}
+
+			// Open the voltage_now file
+			strcpy(filepath + power_dir_len +
+					strlen(battery.name), "/voltage_now");
+			battery.voltage_fd = open_file_readonly(filepath);
+			if (battery.voltage_fd == -1) {
+				close(battery.charge_fd);
+				close(battery.current_fd);
+				continue;
+			}
+
+
+			// Allocate memory if necessary
+			if (system->battery_count == system->max_battery_count) {
+				system->max_battery_count += 128;
+				system->batteries = (struct battery_t *)realloc(
+						system->batteries,
+						sizeof(struct battery_t) *
+						system->max_battery_count);
+			}
+			system->batteries[system->battery_count++] = battery;
+		}
+	}
+	closedir(power_dir);
+
+	// Loop over all batteries
+	for (int i = 0; i < system->battery_count; ++i) {
+		struct battery_t *battery = &system->batteries[i];
+
+		// Read the battery stats
+
+		lseek(battery->charge_fd, 0, SEEK_SET);
+		battery->charge = read_int_from_fd(battery->charge_fd);
+
+		lseek(battery->current_fd, 0, SEEK_SET);
+		battery->current = read_int_from_fd(battery->current_fd);
+
+		lseek(battery->voltage_fd, 0, SEEK_SET);
+		battery->voltage = read_int_from_fd(battery->voltage_fd);
 	}
 }

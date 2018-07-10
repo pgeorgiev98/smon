@@ -8,6 +8,7 @@
 #include "cpu.h"
 #include "disk.h"
 #include "interface.h"
+#include "battery.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,7 +109,10 @@ int main(int argc, char **argv)
 			printf(
 					"-h --help                            Print this help message\n"
 					"-l --log filename stat0 stat1 ...    Log stats to csv file, where each stat can be:\n"
-					"    cpuX{usage,temp,freq} disk_NAME_{read,write} iface_NAME_{read,write}\n");
+					"    cpuX{usage,temp,freq}\n"
+					"    disk_NAME_{read,write}\n"
+					"    iface_NAME_{read,write}\n"
+					"    battery_NAME_{charge,current,voltage}\n");
 			return 0;
 		} else if (!strcmp(arg, "-l") || !strcmp(arg, "--log")) {
 			++i;
@@ -170,6 +174,28 @@ int main(int argc, char **argv)
 							stat.type = LOGGER_IFACE_READ;
 						else if (!strcmp(name_end, "w") || !strcmp(name_end, "write"))
 							stat.type = LOGGER_IFACE_WRITE;
+						else
+							ok = 0;
+						if (ok)
+							log_stats[log_stats_count++] = stat;
+					}
+				} else if (!strncmp(stat_name, "battery_", 8)) {
+					const char *name_end = stat_name + 8;
+					while (*name_end && *name_end != '_')
+						++name_end;
+					if (*name_end == '\0') {
+						ok = 0;
+					} else {
+						int len = name_end - stat_name - 8;
+						strncpy(stat.data.battery_name, stat_name + 8, len);
+						stat.data.battery_name[len] = '\0';
+						++name_end;
+						if (!strcmp(name_end, "c") || !strcmp(name_end, "charge"))
+							stat.type = LOGGER_BAT_CHARGE;
+						else if (!strcmp(name_end, "cu") || !strcmp(name_end, "current"))
+							stat.type = LOGGER_BAT_CURRENT;
+						else if (!strcmp(name_end, "v") || !strcmp(name_end, "voltage"))
+							stat.type = LOGGER_BAT_VOLTAGE;
 						else
 							ok = 0;
 						if (ok)
@@ -249,6 +275,16 @@ int main(int argc, char **argv)
 			bytes_to_human_readable(interface->delta_tx_bytes, up);
 			printf("%-8s %9s/s %9s/s" TERM_ERASE_REST_OF_LINE "\n",
 					interface->name, down, up);
+		}
+
+		printf(TERM_ERASE_REST_OF_LINE "\n");
+		// Battery info
+		printf("Battery   Charge Current Voltage\n");
+		for (int i = 0; i < system.battery_count; ++i) {
+			const struct battery_t *battery = &system.batteries[i];
+			printf("%-8s %6d%% %6.2fA %6.2fV" TERM_ERASE_REST_OF_LINE "\n",
+					battery->name, battery->charge,
+					battery->current / 1000000.f, battery->voltage / 1000000.f);
 		}
 
 		printf(TERM_ERASE_REST_OF_LINE

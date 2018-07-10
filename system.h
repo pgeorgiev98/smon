@@ -4,6 +4,7 @@
 struct cpu_t;
 struct disk_t;
 struct interface_t;
+struct battery_t;
 
 /** All the data about the system is stored here */
 struct system_t
@@ -19,6 +20,10 @@ struct system_t
 	int interface_count; /**< The number of network interfaces */
 	struct interface_t *interfaces; /**< The network interfaces */
 	int max_interface_count;
+
+	int battery_count; /**< The number of batteries */
+	struct battery_t *batteries; /**< The batteries */
+	int max_battery_count;
 
 	// File descriptors for files that are kept open
 	int proc_stat_fd;

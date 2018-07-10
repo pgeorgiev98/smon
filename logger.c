@@ -45,6 +45,12 @@ int logger_init(struct logger_t *logger, int type,
 			sprintf(value, "Interface %s Download Speed (B/s)", stat.data.iface_name);
 		else if (stat.type == LOGGER_IFACE_WRITE)
 			sprintf(value, "Interface %s Upload Speed (B/s)", stat.data.iface_name);
+		else if (stat.type == LOGGER_BAT_CHARGE)
+			sprintf(value, "Battery %s Charge (%%)", stat.data.battery_name);
+		else if (stat.type == LOGGER_BAT_CURRENT)
+			sprintf(value, "Battery %s Current (A)", stat.data.battery_name);
+		else if (stat.type == LOGGER_BAT_VOLTAGE)
+			sprintf(value, "Battery %s Voltage (V)", stat.data.battery_name);
 		else
 			value[0] = '\0';
 
@@ -92,6 +98,24 @@ void logger_log(struct logger_t *logger, struct system_t *system)
 			}
 			sprintf(value, "%llu", interface ? ( stat.type == LOGGER_IFACE_READ ?
 						interface->delta_rx_bytes : interface->delta_tx_bytes) : 0);
+		} else if (stat.type == LOGGER_BAT_CHARGE ||
+				stat.type == LOGGER_BAT_CURRENT ||
+				stat.type == LOGGER_BAT_VOLTAGE) {
+			struct battery_t *battery = NULL;
+			for (int i = 0; i < system->battery_count; ++i) {
+				if (!strcmp(system->batteries[i].name, stat.data.battery_name)) {
+					battery = &system->batteries[i];
+					break;
+				}
+			}
+			int v;
+			if (stat.type == LOGGER_BAT_CHARGE)
+				v = battery->charge;
+			else if (stat.type == LOGGER_BAT_CURRENT)
+				v = battery->current;
+			else if (stat.type == LOGGER_BAT_VOLTAGE)
+				v = battery->voltage;
+			sprintf(value, "%d", v);
 		} else {
 			value[0] = '\0';
 		}
