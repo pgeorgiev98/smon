@@ -277,14 +277,16 @@ int main(int argc, char **argv)
 					interface->name, down, up);
 		}
 
-		printf(TERM_ERASE_REST_OF_LINE "\n");
-		// Battery info
-		printf("Battery   Charge Current Voltage\n");
-		for (int i = 0; i < system.battery_count; ++i) {
-			const struct battery_t *battery = &system.batteries[i];
-			printf("%-8s %6d%% %6.2fA %6.2fV" TERM_ERASE_REST_OF_LINE "\n",
-					battery->name, battery->charge,
-					battery->current / 1000000.f, battery->voltage / 1000000.f);
+		if (system.battery_count > 0) {
+			printf(TERM_ERASE_REST_OF_LINE "\n");
+			// Battery info
+			printf("Battery   Charge Current Voltage\n");
+			for (int i = 0; i < system.battery_count; ++i) {
+				const struct battery_t *battery = &system.batteries[i];
+				printf("%-8s %6d%% %6.2fA %6.2fV" TERM_ERASE_REST_OF_LINE "\n",
+						battery->name, battery->charge,
+						battery->current / 1000000.f, battery->voltage / 1000000.f);
+			}
 		}
 
 		printf(TERM_ERASE_REST_OF_LINE
