@@ -227,6 +227,7 @@ int main(int argc, char **argv)
 	for (;;) {
 		system_refresh_info(&system);
 		logger_log(&logger, &system);
+		fflush(logger.file);
 
 		// CPU frequency and usage
 		for (int c = 0; c < system.cpu_count; ++c) {
