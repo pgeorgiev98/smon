@@ -61,13 +61,13 @@ int read_int_from_file(const char *filename)
 void bytes_to_human_readable(unsigned long long bytes, char *out)
 {
 	static const char * const units[] = {
-		"B", "KiB", "MiB", "GiB", "TiB",
+		"  B", "KiB", "MiB", "GiB", "TiB",
 		"PiB", "EiB", "ZiB", "YiB"
 	};
 	static int units_count = sizeof(units) / sizeof(char *);
 
 	int u, d = 0;
-	for (u = 0; u < units_count && bytes >= 1024; ++u) {
+	for (u = 0; u < units_count && bytes >= 1000; ++u) {
 		d = ((bytes % 1024) / 1024.0f) * 10;
 		bytes /= 1024;
 	}
