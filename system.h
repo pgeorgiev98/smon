@@ -25,8 +25,13 @@ struct system_t
 	struct battery_t *batteries; /**< The batteries */
 	int max_battery_count;
 
+	long long ram_used; /**< The ammount of RAM used by applications (bytes) */
+	long long ram_buffers; /**< The ammount of RAM used as buffers (bytes) */
+	long long ram_cached; /**< THe ammount of RAM used for caches (bytes) */
+
 	// File descriptors for files that are kept open
 	int proc_stat_fd;
+	int meminfo_fd;
 
 	// Generic buffer. Used when reading from /proc/stat
 	char *buffer;

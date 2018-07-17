@@ -37,6 +37,12 @@ int logger_init(struct logger_t *logger, int type,
 			sprintf(value, "CPU%d Temperature", stat.data.cpu_id);
 		else if (stat.type == LOGGER_CPU_FREQUENCY)
 			sprintf(value, "CPU%d Frequency (KHz)", stat.data.cpu_id);
+		else if (stat.type == LOGGER_RAM_USED)
+			sprintf(value, "RAM Used");
+		else if (stat.type == LOGGER_RAM_BUFFERS)
+			sprintf(value, "RAM Buffers");
+		else if (stat.type == LOGGER_RAM_CACHED)
+			sprintf(value, "RAM Caches");
 		else if (stat.type == LOGGER_DISK_READ)
 			sprintf(value, "Disk %s Read Speed (B/s)", stat.data.disk_name);
 		else if (stat.type == LOGGER_DISK_WRITE)
@@ -78,6 +84,14 @@ void logger_log(struct logger_t *logger, struct system_t *system)
 			sprintf(value, "%f", system->cpus[stat.data.cpu_id].total_usage * 100.0);
 		} else if (stat.type == LOGGER_CPU_TEMPERATURE) {
 			sprintf(value, "%f", system->cpus[stat.data.cpu_id].cur_temp / 1000.0);
+
+		} else if (stat.type == LOGGER_RAM_USED) {
+			sprintf(value, "%lld", system->ram_used);
+		} else if (stat.type == LOGGER_RAM_BUFFERS) {
+			sprintf(value, "%lld", system->ram_buffers);
+		} else if (stat.type == LOGGER_RAM_CACHED) {
+			sprintf(value, "%lld", system->ram_cached);
+
 		} else if (stat.type == LOGGER_DISK_READ || stat.type == LOGGER_DISK_WRITE) {
 			struct disk_t *disk = NULL;
 			for (int i = 0; i < system->disk_count; ++i) {

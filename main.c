@@ -110,6 +110,7 @@ int main(int argc, char **argv)
 					"-h --help                            Print this help message\n"
 					"-l --log filename stat0 stat1 ...    Log stats to csv file, where each stat can be:\n"
 					"    cpuX{usage,temp,freq}\n"
+					"    ram_{used,buffers,cached}\n"
 					"    disk_NAME_{read,write}\n"
 					"    iface_NAME_{read,write}\n"
 					"    battery_NAME_{charge,current,voltage}\n");
@@ -139,6 +140,18 @@ int main(int argc, char **argv)
 						if (ok)
 							log_stats[log_stats_count++] = stat;
 					}
+				} else if (!strncmp(stat_name, "ram_", 4)) {
+					const char *s = stat_name + 4;
+					if (!strcmp(s, "u") || !strcmp(s, "used"))
+						stat.type = LOGGER_RAM_USED;
+					else if (!strcmp(s, "b") || !strcmp(s, "buffers"))
+						stat.type = LOGGER_RAM_BUFFERS;
+					else if (!strcmp(s, "c") || !strcmp(s, "cached"))
+						stat.type = LOGGER_RAM_CACHED;
+					else
+						ok = 0;
+					if (ok)
+						log_stats[log_stats_count++] = stat;
 				} else if (!strncmp(stat_name, "disk_", 5)) {
 					const char *name_end = stat_name + 5;
 					while (*name_end && *name_end != '_')
@@ -248,6 +261,19 @@ int main(int argc, char **argv)
 						cpu->cur_freq / 1000,
 						(int)(cpu->total_usage * 100));
 			}
+		}
+		printf(TERM_ERASE_REST_OF_LINE "\n");
+
+		// RAM usage
+		{
+			char used[10], buffers[10], cached[10];
+			bytes_to_human_readable(system.ram_used, used);
+			bytes_to_human_readable(system.ram_buffers, buffers);
+			bytes_to_human_readable(system.ram_cached, cached);
+			printf( "Used:    %8s\n" TERM_ERASE_REST_OF_LINE
+					"Buffers: %8s\n" TERM_ERASE_REST_OF_LINE
+					"Cached:  %8s\n" TERM_ERASE_REST_OF_LINE,
+					used, buffers, cached);
 		}
 		printf(TERM_ERASE_REST_OF_LINE "\n");
 

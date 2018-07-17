@@ -23,6 +23,7 @@ static const int interfaces_dir_len = sizeof(INTERFACES_DIR) - 1;
 #define POWER_DIR "/sys/class/power_supply/"
 static const int power_dir_len = sizeof(POWER_DIR) - 1;
 #define PROC_STAT_DIR "/proc/stat"
+#define MEMINFO_PATH "/proc/meminfo"
 
 
 static void system_cpu_init(struct system_t *);
@@ -35,6 +36,7 @@ struct system_t system_init(void)
 	struct system_t system;
 
 	system.proc_stat_fd = open_file_readonly(PROC_STAT_DIR);
+	system.meminfo_fd = open_file_readonly(MEMINFO_PATH);
 
 	system_cpu_init(&system);
 	system_disk_init(&system);
@@ -53,6 +55,7 @@ void system_delete(struct system_t system)
 {
 	// Close files
 	close(system.proc_stat_fd);
+	close(system.meminfo_fd);
 	for (int i = 0; i < system.cpu_count; ++i)
 		close(system.cpus[i].cur_freq_fd);
 	for (int i = 0; i < system.disk_count; ++i)
@@ -77,6 +80,7 @@ void system_delete(struct system_t system)
 
 
 static void system_refresh_cpus(struct system_t *system);
+static void system_refresh_ram(struct system_t *system);
 static void system_refresh_disks(struct system_t *system);
 static void system_refresh_interfaces(struct system_t *system);
 static void system_refresh_batteries(struct system_t *system);
@@ -84,6 +88,7 @@ static void system_refresh_batteries(struct system_t *system);
 void system_refresh_info(struct system_t *system)
 {
 	system_refresh_cpus(system);
+	system_refresh_ram(system);
 	system_refresh_disks(system);
 	system_refresh_interfaces(system);
 	system_refresh_batteries(system);
@@ -362,6 +367,64 @@ static void system_refresh_cpus(struct system_t *system)
 		closedir(hwmon_subdir);
 	}
 	closedir(hwmon_dir);
+}
+
+static void system_refresh_ram(struct system_t *system)
+{
+	// Read /proc/meminfo
+	lseek(system->meminfo_fd, 0, SEEK_SET);
+	const int MAX_MEMINFO_LEN = 4096;
+	char meminfo[MAX_MEMINFO_LEN];
+	int bytes = read_fd_to_string(system->meminfo_fd, meminfo,
+			MAX_MEMINFO_LEN);
+	long long mem_total = -1, mem_free = -1,
+		 mem_buffers = -1, mem_cached = -1,
+		 mem_reclaimable = -1, mem_shared = -1;
+
+	char key[128];
+	for (int i = 0; i < bytes;) {
+		// Read the key
+		int key_len = 0;
+		for (; i < bytes && meminfo[i] != ':' && key_len < 127; ++i)
+			key[key_len++] = meminfo[i];
+		if (i == bytes)
+			break;
+		key[key_len] = '\0';
+
+		// Find the begining of the value
+		for (; i < bytes && (meminfo[i] < '0' || meminfo[i] > '9'); ++i);
+
+		// Read the value
+		int value = 0;
+		for (; i < bytes && meminfo[i] >= '0' && meminfo[i] <= '9'; ++i)
+			value = value * 10 + (meminfo[i] - '0');
+
+		// Find the end of the line
+		for (; i < bytes && meminfo[i - 1] != '\n'; ++i);
+
+		// If we have successfully read the whole line...
+		if (meminfo[i - 1] == '\n') {
+			if (!strcmp(key, "MemTotal"))
+				mem_total = value;
+			else if (!strcmp(key, "MemFree"))
+				mem_free = value;
+			else if (!strcmp(key, "Buffers"))
+				mem_buffers = value;
+			else if (!strcmp(key, "Cached"))
+				mem_cached = value;
+			else if (!strcmp(key, "SReclaimable"))
+				mem_reclaimable = value;
+			else if (!strcmp(key, "Shmem"))
+				mem_shared = value;
+		}
+	}
+
+	int total_used = mem_total - mem_free;
+	int cached = mem_cached + mem_reclaimable - mem_shared;
+	int used = total_used - mem_buffers - cached;
+	system->ram_buffers = mem_buffers * 1024LL;
+	system->ram_cached = cached * 1024LL;
+	system->ram_used = used * 1024LL;
 }
 
 static void system_refresh_disks(struct system_t *system)
