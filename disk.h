@@ -15,7 +15,7 @@ enum
 	DISK_STATS_COUNT = 8
 };
 
-#define MAX_DISK_NAME_LENGTH 15
+#define MAX_DISK_NAME_LENGTH 31
 
 /** A block device */
 struct disk_t

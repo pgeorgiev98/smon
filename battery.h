@@ -1,7 +1,7 @@
 #ifndef BATTERY_H_INCLUDED
 #define BATTERY_H_INCLUDED
 
-#define MAX_BATTERY_NAME_LENGTH 7
+#define MAX_BATTERY_NAME_LENGTH 15
 
 /** A battery */
 struct battery_t

@@ -1,7 +1,7 @@
 #ifndef INTERFACE_H_INCLUDED
 #define INTERFACE_H_INCLUDED
 
-#define MAX_INTERFACE_NAME_LENGTH 15
+#define MAX_INTERFACE_NAME_LENGTH 31
 
 /** A network interface */
 struct interface_t
