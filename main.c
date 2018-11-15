@@ -242,6 +242,23 @@ int main(int argc, char **argv)
 		logger_log(&logger, &system);
 		fflush(logger.file);
 
+		int max_name_length = 9;
+		for (int i = 0; i < system.disk_count; ++i) {
+			int len = strlen(system.disks[i].name);
+			if (len > max_name_length)
+				max_name_length = len;
+		}
+		for (int i = 0; i < system.interface_count; ++i) {
+			int len = strlen(system.interfaces[i].name);
+			if (len > max_name_length)
+				max_name_length = len;
+		}
+		for (int i = 0; i < system.battery_count; ++i) {
+			int len = strlen(system.batteries[i].name);
+			if (len > max_name_length)
+				max_name_length = len;
+		}
+
 		// CPU frequency and usage
 		for (int c = 0; c < system.cpu_count; ++c) {
 			const struct cpu_t *cpu = &system.cpus[c];
@@ -278,7 +295,7 @@ int main(int argc, char **argv)
 		printf(TERM_ERASE_REST_OF_LINE "\n");
 
 		// Disk usage
-		printf("Disk            Read       Write\n");
+		printf("%-*s        Read       Write\n", max_name_length, "Disk");
 		for (int d = 0; d < system.disk_count; ++d) {
 			const struct disk_t *disk = &system.disks[d];
 			char read[10], write[10];
@@ -288,30 +305,30 @@ int main(int argc, char **argv)
 			bytes_to_human_readable(
 					disk->stats_delta[DISK_WRITE_SECTORS] * 512, write);
 
-			printf("%-8s %9s/s %9s/s" TERM_ERASE_REST_OF_LINE "\n",
-					disk->name, read, write);
+			printf("%-*s %9s/s %9s/s" TERM_ERASE_REST_OF_LINE "\n",
+					max_name_length, disk->name, read, write);
 		}
 
 		printf(TERM_ERASE_REST_OF_LINE "\n");
 		// Network usage
-		printf("Interface   Download      Upload\n");
+		printf("%-*s    Download      Upload\n", max_name_length, "Interface");
 		for (int i = 0; i < system.interface_count; ++i) {
 			const struct interface_t *interface = &system.interfaces[i];
 			char down[10], up[10];
 			bytes_to_human_readable(interface->delta_rx_bytes, down);
 			bytes_to_human_readable(interface->delta_tx_bytes, up);
-			printf("%-8s %9s/s %9s/s" TERM_ERASE_REST_OF_LINE "\n",
-					interface->name, down, up);
+			printf("%-*s %9s/s %9s/s" TERM_ERASE_REST_OF_LINE "\n",
+					max_name_length, interface->name, down, up);
 		}
 
 		if (system.battery_count > 0) {
 			printf(TERM_ERASE_REST_OF_LINE "\n");
 			// Battery info
-			printf("Battery   Charge Current Voltage\n");
+			printf("%-*s  Charge Current Voltage\n", max_name_length, "Battery");
 			for (int i = 0; i < system.battery_count; ++i) {
 				const struct battery_t *battery = &system.batteries[i];
-				printf("%-8s %6d%% %6.2fA %6.2fV" TERM_ERASE_REST_OF_LINE "\n",
-						battery->name, battery->charge,
+				printf("%-*s %6d%% %6.2fA %6.2fV" TERM_ERASE_REST_OF_LINE "\n",
+						max_name_length, battery->name, battery->charge,
 						battery->current / 1000000.f, battery->voltage / 1000000.f);
 			}
 		}
