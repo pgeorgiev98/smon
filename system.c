@@ -120,6 +120,8 @@ static void system_cpu_init(struct system_t *system)
 	char fname[128];
 	strcpy(fname, CPU_DEVICES_DIR);
 	DIR *cpu_devices_dir = opendir(CPU_DEVICES_DIR);
+	if (cpu_devices_dir == NULL)
+		return;
 	struct dirent *cpu_ent;
 	while ((cpu_ent = readdir(cpu_devices_dir))) {
 		// Skip entities not starting with "cpu"
